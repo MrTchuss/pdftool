@@ -1,0 +1,57 @@
+#!/bin/bash
+
+function split() {
+   local basefilename=$(basename ${filename} .pdf)
+   # page count
+   local pageCount=$(gs -dBATCH -dNOPAUSE -q -c "(${filename}) (r) file runpdfbegin pdfpagecount = quit")
+
+   for i in $(seq 1 ${pageCount});
+   do
+      echo "[*] Processing page ${i}"
+      local outfilename=${basefilename}_$(printf "%0.3d" $i).pdf
+      # split page
+      gs -q -dBATCH -dNOPAUSE -sDEVICE=pdfwrite -dFirstPage=$i -dLastPage=$i -sOutputFile=${outfilename} ${filename}
+   done
+}
+
+cmd=""
+outfile=""
+TEMP=`getopt -o sm::h --long split,merge::,help \
+     -n 'pdftool' -- "$@"`
+
+if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
+
+# Note the quotes around `$TEMP': they are essential!
+eval set -- "$TEMP"
+
+while true ; do
+	case "$1" in
+		-s|--split) cmd="split" ; shift ;;
+		-m|--merge) cmd="merge" ; outfile="$2" ; shift 2 ;; # if no arguments, outfile=""
+		-h|--help) echo "pdftool [-m[filename]|--merge[=filename]] [-s|--split] files..." ; exit ;; 
+		--) shift ; break ;;
+		*) echo "Internal error!" ; exit 1 ;;
+	esac
+done
+
+if [ $# -eq 0 ] ; then
+   echo "[!] Must have at least one argument."
+   exit -1
+fi
+
+if [ "${cmd}_" == "_" ] ; then
+   echo "[!] Must indicate an action to perform (--merge or --split)"
+   exit -1
+elif [ ${cmd} == "split" ] ; then
+   for filename in "$@" ; do
+      echo "[+] Spliting ${filename}"
+      split ${filename}
+      shift
+   done
+elif [ ${cmd} == "merge" ] ; then
+   if [ "${outfile}_" == "_" ] ; then
+      outfile=$(tempfile -s .pdf)
+   fi
+   echo "[+] Merging in file ${outfile}"
+   gs -dBATCH -dNOPAUSE -q -sDEVICE=pdfwrite -sOutputFile=${outfile} "$@"
+fi
